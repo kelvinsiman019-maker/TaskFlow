@@ -3,115 +3,114 @@ import { useEffect, useState } from "react";
 import {
   FlatList,
   SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import Toast from "react-native-toast-message";
 import { supabase } from "../../lib/supabase";
-import AddTaskModal from "../components/AddTaskModal";
+import AddTaskModal from "./AddTaskModal";
 
+// ---- TYPE ----
 type Task = {
   id: string;
   title: string;
   completed: boolean;
+  created_at?: string;
 };
 
-export default function Index() {
+export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
-  const loadTasks = async () => {
+  // ---- READ ----
+  async function loadTasks() {
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
-      Toast.show({ type: "error", text1: "Load failed", text2: error.message });
+      console.log("Error loading tasks:", error.message);
+      setLoading(false);
       return;
     }
-    setTasks(data ?? []);
-  };
+
+    setTasks((data as Task[]) ?? []);
+    setLoading(false);
+  }
 
   useEffect(() => {
     loadTasks();
   }, []);
 
-  const addTask = async (title: string) => {
+  // ---- CREATE ----
+  async function addTask(title: string) {
     const { error } = await supabase
       .from("tasks")
       .insert([{ title, completed: false }]);
 
     if (error) {
-      Toast.show({
-        type: "error",
-        text1: "Could not add task",
-        text2: error.message,
-      });
+      console.log("Error adding task:", error.message);
       return;
     }
 
-    await loadTasks();
-    Toast.show({ type: "success", text1: "Task added ✓" });
-  };
+    loadTasks();
+  }
 
-  const toggleTask = async (item: Task) => {
+  // ---- TOGGLE COMPLETE ----
+  async function toggleTask(item: Task) {
     const { error } = await supabase
       .from("tasks")
       .update({ completed: !item.completed })
       .eq("id", item.id);
 
     if (error) {
-      Toast.show({
-        type: "error",
-        text1: "Update failed",
-        text2: error.message,
-      });
+      console.log("Error updating task:", error.message);
       return;
     }
 
-    await loadTasks();
-    Toast.show({
-      type: "success",
-      text1: item.completed ? "Marked incomplete" : "Task completed ✓",
-    });
-  };
+    loadTasks();
+  }
 
-  const deleteTask = async (id: string) => {
+  // ---- DELETE ----
+  async function deleteTask(id: string) {
     const { error } = await supabase.from("tasks").delete().eq("id", id);
 
     if (error) {
-      Toast.show({
-        type: "error",
-        text1: "Could not delete task",
-        text2: error.message,
-      });
+      console.log("Error deleting task:", error.message);
       return;
     }
 
-    await loadTasks();
-    Toast.show({ type: "success", text1: "Task deleted" });
-  };
+    loadTasks();
+  }
 
+  // ---- RENDER ----
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={headerStyles.header}>
-        <Text style={headerStyles.title}>TaskFlow</Text>
-        <Text style={headerStyles.count}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>TaskFlow</Text>
+        <Text style={styles.headerCount}>
           {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
         </Text>
       </View>
 
-      {tasks.length === 0 ? (
+      {/* Task list / empty state */}
+      {loading ? (
+        <Text style={styles.emptyText}>Loading tasks…</Text>
+      ) : tasks.length === 0 ? (
         <View style={styles.emptyContainer}>
           <MaterialIcons
             name="check-circle-outline"
-            size={52}
+            size={48}
             color="#D1D5DB"
           />
-          <Text style={styles.emptyText}>No tasks yet. Add one!</Text>
+          <Text style={styles.emptyText}>No tasks yet. Add one above!</Text>
           <Text style={styles.hintText}>
             Tap to complete • Long-press to delete
           </Text>
@@ -119,28 +118,37 @@ export default function Index() {
       ) : (
         <FlatList
           data={tasks}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: Task) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
+          renderItem={({ item }: { item: Task }) => (
             <TouchableOpacity
-              style={styles.taskRow}
               onPress={() => toggleTask(item)}
               onLongPress={() => deleteTask(item.id)}
               activeOpacity={0.7}
             >
-              <MaterialIcons
-                name={item.completed ? "check-box" : "check-box-outline-blank"}
-                size={22}
-                color={item.completed ? "#2E5BBA" : "#5A6472"}
-              />
-              <Text
-                style={[
-                  styles.taskText,
-                  item.completed && styles.taskTextCompleted,
-                ]}
-              >
-                {item.title}
-              </Text>
+              <View style={styles.taskRow}>
+                <MaterialIcons
+                  name={
+                    item.completed ? "check-box" : "check-box-outline-blank"
+                  }
+                  size={22}
+                  color={item.completed ? "#4F46E5" : "#9CA3AF"}
+                />
+                <Text
+                  style={[
+                    styles.taskText,
+                    item.completed && styles.taskTextCompleted,
+                  ]}
+                >
+                  {item.title}
+                </Text>
+                <MaterialIcons
+                  name="chevron-right"
+                  size={18}
+                  color="#E5E7EB"
+                  style={styles.chevron}
+                />
+              </View>
             </TouchableOpacity>
           )}
           ListFooterComponent={
@@ -151,6 +159,7 @@ export default function Index() {
         />
       )}
 
+      {/* Floating action button */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setModalVisible(true)}
@@ -159,49 +168,77 @@ export default function Index() {
         <MaterialIcons name="add" size={28} color="#fff" />
       </TouchableOpacity>
 
+      {/* Modal */}
       <AddTaskModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        onSubmit={(text: string) => {
+        onSubmit={(text) => {
           addTask(text);
           setModalVisible(false);
         }}
       />
-
-      <Toast />
     </SafeAreaView>
   );
 }
 
-const headerStyles = StyleSheet.create({
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F5F6FA",
+  },
+
+  /* Header */
   header: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    marginBottom: 10,
+    paddingBottom: 12,
   },
-  title: { fontSize: 28, fontWeight: "bold", color: "#1F2A44" },
-  count: { fontSize: 13, color: "#9CA3AF", fontWeight: "500" },
-});
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#1F2937",
+    letterSpacing: -0.5,
+  },
+  headerCount: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "500",
+  },
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#fff" },
-  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  /* List */
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 100, // room for FAB
+  },
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    gap: 10,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E2E5EA",
   },
-  taskText: { fontSize: 15, color: "#1F2937", flex: 1 },
-  taskTextCompleted: { color: "#9CA3AF", textDecorationLine: "line-through" },
+  taskText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    color: "#1F2937",
+  },
+  taskTextCompleted: {
+    color: "#9CA3AF",
+    textDecorationLine: "line-through",
+  },
+  chevron: {
+    marginLeft: 4,
+  },
+
+  /* Empty state */
   emptyContainer: {
     flex: 1,
     alignItems: "center",
@@ -210,9 +247,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    fontSize: 15,
-    fontWeight: "600",
+    textAlign: "center",
     color: "#9CA3AF",
+    fontSize: 14,
     marginTop: 8,
   },
   hintText: {
@@ -221,6 +258,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     paddingVertical: 12,
   },
+
+  /* FAB */
   fab: {
     position: "absolute",
     bottom: 32,
@@ -228,10 +267,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#2E5BBA",
+    backgroundColor: "#4F46E5",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#2E5BBA",
+    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
